@@ -15,6 +15,7 @@
 .hero__media {
   position: absolute;
   inset: 0;
+  background-image: url('../img/hero-beach.jpg');
   background-size: cover;
   background-position: center;
   z-index: 0;
@@ -266,6 +267,7 @@
 .video-band__media {
   position: absolute;
   inset: -10% 0;
+  background-image: url('../img/video-poster.jpg');
   background-size: cover;
   background-position: center;
   will-change: transform;
@@ -406,6 +408,7 @@
 .locations__bg {
   position: absolute;
   inset: -10% 0;
+  background-image: url('../img/locations-bg.jpg');
   background-size: cover;
   background-position: center;
   will-change: transform;
@@ -618,6 +621,7 @@
 .newsletter__bg {
   position: absolute;
   inset: -10% 0;
+  background-image: url('../img/newsletter-bg.jpg');
   background-size: cover;
   background-position: center;
   will-change: transform;

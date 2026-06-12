@@ -24,12 +24,14 @@ permissions:
   pages: write
   id-token: write
 
-# Newest sheet snapshot is the one we want, so cancel any in-flight refresh
-# when a new one is queued. Share the "pages" group with deploy.yml so a
-# code-change deploy and a data-refresh deploy don't fight for the same
-# environment.
+# Both workflows publish to the same Pages environment, but they share that
+# environment via Pages' own server-side serialisation, NOT via this
+# concurrency group. We use a workflow-private group so that a cron
+# cancellation only ever cancels another cron — never a developer's
+# in-flight code deploy. (Sharing 'pages' across both with
+# cancel-in-progress: true would let a 10-min cron tick kill a human push.)
 concurrency:
-  group: pages
+  group: pages-refresh
   cancel-in-progress: true
 
 jobs:
@@ -59,6 +61,10 @@ jobs:
 
       - run: npm run build
         if: ${{ inputs.dry_run != true }}
+        env:
+          # Surfaced in booking.js as `?v=<run id>` on the bookings.json fetch
+          # URL so each deploy gets a fresh cache key at the Fastly edge.
+          VITE_BUILD_ID: ${{ github.run_id }}
 
       - uses: actions/configure-pages@v5
         if: ${{ inputs.dry_run != true }}

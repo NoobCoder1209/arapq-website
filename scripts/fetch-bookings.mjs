@@ -91,7 +91,6 @@ async function readTab(tabName) {
     spreadsheetId: SPREADSHEET_ID,
     range: `'${tabName}'`,
     valueRenderOption: 'FORMATTED_VALUE',
-    dateTimeRenderOption: 'FORMATTED_STRING',
   });
   return res.data.values || [];
 }
@@ -224,7 +223,16 @@ async function main() {
   info(`▶ Reading spreadsheet ${SPREADSHEET_ID} as ${credentials.client_email}`);
   info(`  current year is ${CURRENT_YEAR}`);
 
-  const allTabs = new Set(await listTabs());
+  const allTabsList = await listTabs();
+  if (allTabsList.length === 0) {
+    fail(
+      `spreadsheets.get returned zero tabs for ${SPREADSHEET_ID}. ` +
+      `Likely causes: (a) wrong SPREADSHEET_ID, (b) the service account ` +
+      `lacks at least Viewer access on the spreadsheet, (c) the spreadsheet ` +
+      `was deleted. Service account: ${credentials.client_email}`,
+    );
+  }
+  const allTabs = new Set(allTabsList);
 
   // Always read current-year tabs. Read next-year tabs too if they exist,
   // so December → January rolls over without operator intervention.

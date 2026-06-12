@@ -1,12 +1,50 @@
 import flatpickr from 'flatpickr';
 
-export function initBooking() {
+// Where bookings.json lives once Vite has applied the production base path.
+// In dev: /assets/data/bookings.json
+// In prod: /arapq-website/assets/data/bookings.json
+// import.meta.env.BASE_URL resolves to whichever applies.
+const BOOKINGS_URL = `${import.meta.env.BASE_URL}assets/data/bookings.json`;
+
+// Cache the bookings load so multiple calls in one page reuse the same fetch.
+let bookingsPromise = null;
+
+async function loadBookings() {
+  if (!bookingsPromise) {
+    bookingsPromise = fetch(BOOKINGS_URL, { cache: 'no-cache' })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .catch((err) => {
+        // Don't break the page if the file is missing or malformed — flatpickr
+        // will simply mark no dates as disabled and the user falls back to
+        // submitting a request that we'll cross-check manually.
+        console.warn('[booking] could not load bookings.json:', err.message);
+        return null;
+      });
+  }
+  return bookingsPromise;
+}
+
+export async function initBooking() {
   const checkin = document.getElementById('bk-checkin');
   const checkout = document.getElementById('bk-checkout');
   const form = document.getElementById('booking-form');
   const modal = document.getElementById('booking-modal');
 
   if (!checkin || !checkout || !form || !modal) return;
+
+  // Pull the per-page bungalow key (B1 / B2 / B3) and resolve its
+  // unavailable-date list. Falls through to no disabled dates if the file
+  // is missing or the page didn't tag the form.
+  const bungalowKey = form.dataset.bungalowKey;
+  const bookings = bungalowKey ? await loadBookings() : null;
+  const disable = bookings?.bungalows?.[bungalowKey] ?? [];
+
+  if (bungalowKey && bookings && disable.length === 0) {
+    console.info(`[booking] no unavailable dates listed for ${bungalowKey}`);
+  }
 
   const today = new Date();
   const tomorrow = new Date();
@@ -15,6 +53,7 @@ export function initBooking() {
   const fpIn = flatpickr(checkin, {
     minDate: 'today',
     dateFormat: 'M j, Y',
+    disable,
     onChange: (selected) => {
       if (selected[0]) {
         const d = new Date(selected[0]);
@@ -27,6 +66,7 @@ export function initBooking() {
   const fpOut = flatpickr(checkout, {
     minDate: tomorrow,
     dateFormat: 'M j, Y',
+    disable,
   });
 
   // Hidden bungalow tag — set on per-bungalow pages so the modal copy can

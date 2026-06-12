@@ -35,6 +35,7 @@ import { google } from 'googleapis';
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 const KEY_JSON = process.env.GOOGLE_SHEETS_KEY;
 const DRY_RUN = process.argv.includes('--dry-run');
+const RECON = process.argv.includes('--recon');
 const OUT_PATH = path.join(process.cwd(), 'public/assets/data/bookings.json');
 
 // Tabs we read. The bungalow key matches the slug used on the front-end
@@ -257,6 +258,21 @@ async function main() {
       throw new Error(`Failed to read tab '${tab}': ${e.message}`);
     }
     info(`    grid is ${grid.length} rows × ${Math.max(0, ...grid.map((r) => r.length))} cols`);
+
+    if (RECON) {
+      info(`    --- recon dump for '${tab}' (first 30 rows, first 35 cols) ---`);
+      for (let r = 0; r < Math.min(30, grid.length); r++) {
+        const row = grid[r] || [];
+        const cells = [];
+        for (let c = 0; c < Math.min(35, row.length); c++) {
+          const v = row[c];
+          cells.push(v == null || v === '' ? '·' : String(v).slice(0, 6));
+        }
+        info(`    r${String(r + 1).padStart(2, '0')}: ${cells.join('|')}`);
+      }
+      info(`    --- end recon ---`);
+      continue;
+    }
 
     const { unavailable, monthsFound } = parseTab(grid, 2026, key, tab);
     out.bungalows[key] = unavailable;

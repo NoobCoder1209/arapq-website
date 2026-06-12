@@ -31,7 +31,17 @@ function loadBookings() {
   return bookingsPromise;
 }
 
-const toIso = (d) => d.toISOString().slice(0, 10);
+// Local-time YYYY-MM-DD. Using `.toISOString()` would shift the date back
+// for UTC+ users (the bulk of our likely audience): a Date constructed at
+// local midnight serialises as 22:00 UTC the previous day, so the slice(0,10)
+// would produce the wrong key. Reservations in bookings.json are also keyed
+// by local calendar date, so this stays in sync.
+const toIso = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
 
 export function initBooking() {
   const checkin = document.getElementById('bk-checkin');
@@ -55,14 +65,17 @@ export function initBooking() {
   // onDayCreate fires per-cell when flatpickr draws the calendar grid.
   // We tag booked dates with `.is-booked` so the CSS can distinguish them
   // from `minDate`-blocked past days (which are just `.flatpickr-disabled`
-  // and rendered as plain greyed-out cells).
+  // and rendered as plain greyed-out cells). The class+aria mutation is
+  // guarded so a future flatpickr that re-fires the hook on existing
+  // elements can't stack the aria-label suffix.
   const tagBookedDay = (_, __, ___, dayElem) => {
     if (!dayElem?.dateObj) return;
+    if (dayElem.classList.contains('is-booked')) return;
     const iso = toIso(dayElem.dateObj);
     if (disabledSet.has(iso)) {
       dayElem.classList.add('is-booked');
-      dayElem.setAttribute('aria-label',
-        `${dayElem.getAttribute('aria-label') || iso} — already booked`);
+      const base = dayElem.getAttribute('aria-label') || iso;
+      dayElem.setAttribute('aria-label', `${base} — already booked`);
     }
   };
 
@@ -102,9 +115,12 @@ export function initBooking() {
       // `set('disable', ...)` updates the day cells' disabled state but does
       // not re-run onDayCreate, so the .is-booked class wouldn't land on
       // already-rendered cells. redraw() rebuilds the visible month and
-      // re-fires onDayCreate per cell.
-      fpIn.redraw();
-      fpOut.redraw();
+      // re-fires onDayCreate per cell. Skip when the list is empty —
+      // there's nothing to tag and redraw can briefly steal focus.
+      if (dates.length) {
+        fpIn.redraw();
+        fpOut.redraw();
+      }
 
       // If the user managed to pick a date in the brief window before
       // bookings.json loaded, and that date is now known-blocked, clear

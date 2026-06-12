@@ -1047,11 +1047,18 @@
    .is-booked by booking.js's onDayCreate. They're styled differently
    from default flatpickr-disabled (which also covers minDate-blocked
    past dates) so users can tell at a glance which dates are reserved
-   versus simply in the past. */
+   versus simply in the past.
+
+   Specificity note: pairing `.is-booked` with `.flatpickr-disabled`
+   (and covering hover/focus states explicitly) ensures we win against
+   the flatpickr CDN sheet without depending on source order, and that
+   keyboard focus on a booked cell doesn't repaint cream → grey. */
 .flatpickr-day.is-booked,
 .flatpickr-day.is-booked:hover,
+.flatpickr-day.is-booked:focus,
 .flatpickr-day.is-booked.flatpickr-disabled,
-.flatpickr-day.is-booked.flatpickr-disabled:hover {
+.flatpickr-day.is-booked.flatpickr-disabled:hover,
+.flatpickr-day.is-booked.flatpickr-disabled:focus {
   background: var(--bg-cream);
   color: var(--text-muted);
   text-decoration: line-through;

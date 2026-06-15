@@ -103,6 +103,23 @@ function initCallTwoTap() {
 // Idempotent: dataset.drawerInit guards against double-binding under HMR /
 // repeat initHeader() calls. The drawer itself remains closed-by-default —
 // page reload always starts collapsed (no localStorage of state).
+
+// Length of the slide+fade. Matches the inline 250ms in layout.css for
+// .primary-nav__panel / .primary-nav__backdrop; the safety timeout that
+// re-applies [hidden] post-close uses this + buffer.
+const DRAWER_TRANSITION_MS = 250;
+const DRAWER_TRANSITION_FALLBACK_MS = DRAWER_TRANSITION_MS + 150;
+
+// Background regions taken out of the focus order while the drawer is open.
+// Using inert (and a stale-attribute cleanup on close) is the one-line
+// guarantee the focus trap actually wants — boundary checks alone don't
+// help if focus ever lands on a non-drawer element.
+//
+// Note: we inert .site-logo and .site-header__cta (the two non-toggle
+// slots) rather than the whole #site-header — the hamburger toggle MUST
+// remain interactive so close-path #4 (second-click) keeps working.
+const INERT_SELECTORS = ['.site-logo', '.site-header__cta', 'main', '.site-footer', '.primary-nav__noscript'];
+
 function initDrawer() {
   const toggle = document.querySelector('[data-nav-toggle]');
   const panel = document.getElementById('primary-nav');
@@ -124,6 +141,17 @@ function initDrawer() {
   let lastFocusBeforeOpen = null;
   // Saved scroll position so position:fixed body-lock doesn't jump the page.
   let lockedScrollY = 0;
+  // Increments on every close. The `transitionend` / safety-timeout cleanup
+  // closure captures the token at schedule time and bails if it's stale —
+  // so a rapid open-close-open can't have the prior close's cleanup hide
+  // the panel mid-second-slide.
+  let closeToken = 0;
+  // Stash the scrollbar gutter measured at open-time so close() can clear
+  // exactly the padding it added (multiple resizes mid-open can't leave
+  // residue).
+  let lockedGutter = 0;
+  // Elements we marked [inert] so we know exactly which ones to clear.
+  let inertedEls = [];
 
   // ── Open ──────────────────────────────────────────────────────────────
   function open() {
@@ -131,11 +159,36 @@ function initDrawer() {
     isOpen = true;
     lastFocusBeforeOpen = document.activeElement;
 
+    // Compensate for the disappearing scrollbar BEFORE flipping body to
+    // position:fixed — measuring after the swap reads 0. Apply matching
+    // padding-right to <body> AND the sticky <header> (otherwise the
+    // header's right-anchored CTA pill jumps when the body widens).
+    lockedGutter = window.innerWidth - document.documentElement.clientWidth;
+    if (lockedGutter > 0) {
+      document.body.style.paddingRight = `${lockedGutter}px`;
+      const header = document.getElementById('site-header');
+      if (header) header.style.paddingRight = `${lockedGutter}px`;
+    }
+
     // Body scroll lock. position:fixed leaks the current scroll position,
     // so we offset top by the saved Y and restore it on close.
     lockedScrollY = window.scrollY || window.pageYOffset || 0;
     document.body.style.top = `-${lockedScrollY}px`;
     document.body.classList.add('body--scroll-locked');
+
+    // Take everything outside the drawer out of the tab order + AT
+    // announcement. This makes the focus trap robust to focus drifting
+    // onto a non-drawer element (devtools, programmatic .focus(), future
+    // changes that add inert-aware UI). Cleared on close.
+    inertedEls = [];
+    INERT_SELECTORS.forEach((sel) => {
+      document.querySelectorAll(sel).forEach((el) => {
+        if (el === panel || el.contains(panel)) return;
+        el.setAttribute('inert', '');
+        el.setAttribute('aria-hidden', 'true');
+        inertedEls.push(el);
+      });
+    });
 
     // Reveal first (clear `hidden`), then in the next frame flip the
     // [data-state] attribute so the CSS transition actually animates from
@@ -162,43 +215,66 @@ function initDrawer() {
   function close() {
     if (!isOpen) return;
     isOpen = false;
+    closeToken += 1;
+    const myToken = closeToken;
 
     panel.dataset.state = 'closed';
     backdrop.dataset.state = 'closed';
-    panel.setAttribute('aria-hidden', 'true');
     toggle.setAttribute('aria-expanded', 'false');
 
     // Restore body scroll BEFORE setting the page back to its prior Y.
     document.body.classList.remove('body--scroll-locked');
     document.body.style.top = '';
+    if (lockedGutter > 0) {
+      document.body.style.paddingRight = '';
+      const header = document.getElementById('site-header');
+      if (header) header.style.paddingRight = '';
+      lockedGutter = 0;
+    }
     window.scrollTo(0, lockedScrollY);
+
+    // Clear inert + aria-hidden from background regions before moving
+    // focus, so the restore target (typically the toggle, which lives
+    // inside #site-header) is reachable.
+    inertedEls.forEach((el) => {
+      el.removeAttribute('inert');
+      el.removeAttribute('aria-hidden');
+    });
+    inertedEls = [];
 
     document.removeEventListener('keydown', onKeyDown);
 
-    // Wait for the transition to finish before re-applying [hidden] so the
-    // panel doesn't disappear mid-slide. Fallback timeout in case
-    // transitionend never fires (reduced-motion, collapsed transition).
-    let cleanedUp = false;
-    const cleanup = () => {
-      if (cleanedUp) return;
-      cleanedUp = true;
-      // Only hide if a re-open didn't beat us to it.
-      if (!isOpen) {
-        panel.hidden = true;
-        backdrop.hidden = true;
-      }
-      panel.removeEventListener('transitionend', cleanup);
-    };
-    panel.addEventListener('transitionend', cleanup);
-    setTimeout(cleanup, 400);
-
-    // Restore focus to the hamburger (or whatever opened the drawer).
+    // Restore focus to the hamburger BEFORE setting aria-hidden on the
+    // panel. Setting aria-hidden=true on an element while a descendant
+    // still has focus is an a11y violation that Chrome devtools / axe
+    // both flag.
     const restoreTarget =
-      (lastFocusBeforeOpen && document.contains(lastFocusBeforeOpen)
+      (lastFocusBeforeOpen
+        && lastFocusBeforeOpen !== document.body
+        && document.contains(lastFocusBeforeOpen))
         ? lastFocusBeforeOpen
-        : toggle);
+        : toggle;
     restoreTarget.focus({ preventScroll: true });
     lastFocusBeforeOpen = null;
+
+    panel.setAttribute('aria-hidden', 'true');
+
+    // Wait for the transition to finish before re-applying [hidden] so the
+    // panel doesn't disappear mid-slide. Two safeguards:
+    //   1. filter `transitionend` by propertyName === 'transform' so a
+    //      future second transitioned property doesn't fire cleanup early
+    //   2. closeToken guard — if a re-open beat us, the captured token is
+    //      stale and we skip
+    const cleanup = (e) => {
+      if (e && e.propertyName && e.propertyName !== 'transform') return;
+      panel.removeEventListener('transitionend', cleanup);
+      if (myToken !== closeToken) return;
+      if (isOpen) return;
+      panel.hidden = true;
+      backdrop.hidden = true;
+    };
+    panel.addEventListener('transitionend', cleanup);
+    setTimeout(() => cleanup(null), DRAWER_TRANSITION_FALLBACK_MS);
   }
 
   function setClosedAttrs() {
@@ -223,17 +299,46 @@ function initDrawer() {
   // Backdrop click (close path #3).
   backdrop.addEventListener('click', close);
 
-  // Click any link in the drawer (close path #1). The link's default
-  // navigation still proceeds — we just close before the unload so the
-  // page doesn't show a transition on the way out, and so a same-page
-  // hash link feels instant.
+  // Click any link in the drawer (close path #1). Default navigation
+  // proceeds normally — closing first just makes the drawer feel
+  // responsive on the way out (it doesn't actually visibly transition
+  // before unload, but the state-transition is correct and clean).
+  // Modifier-clicks (Cmd/Ctrl/middle/Shift/Alt) open the link in a new
+  // tab — the current tab doesn't navigate, so we leave the drawer open
+  // instead of yanking the user's context.
   panel.querySelectorAll('[data-nav-link]').forEach((link) => {
-    link.addEventListener('click', () => close());
+    link.addEventListener('click', (e) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (e.button !== undefined && e.button !== 0) return;
+      close();
+    });
+  });
+
+  // Close on viewport rotation/resize that crosses the mobile breakpoint
+  // (480px). iOS in particular has long-standing bugs where position:fixed
+  // body-lock + an orientation change can paint the page offscreen — the
+  // safest mitigation is to close the drawer on orientationchange and
+  // let the user reopen it cleanly.
+  let resizeTimer = null;
+  let lastWasNarrow = window.innerWidth <= 480;
+  window.addEventListener('resize', () => {
+    if (!isOpen) return;
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      const isNarrow = window.innerWidth <= 480;
+      if (isNarrow !== lastWasNarrow) {
+        lastWasNarrow = isNarrow;
+        close();
+      }
+    }, 100);
+  });
+  window.addEventListener('orientationchange', () => {
+    if (isOpen) close();
   });
 
   // Esc + Tab focus trap (close path #2 + spec focus trap requirement).
   function onKeyDown(e) {
-    if (e.key === 'Escape' || e.key === 'Esc') {
+    if (e.key === 'Escape') {
       e.preventDefault();
       close();
       return;
@@ -242,7 +347,11 @@ function initDrawer() {
 
     const focusables = getFocusable(panel);
     if (focusables.length === 0) {
-      // Nothing tabbable in the drawer — keep focus pinned to the panel.
+      // Nothing tabbable in the drawer (shouldn't happen — the close
+      // button is always rendered — but if a future change empties the
+      // panel, pin focus to the panel itself rather than letting it
+      // escape into the inert background). The user won't see a focus
+      // ring on tabindex=-1, but they're contained.
       e.preventDefault();
       panel.focus({ preventScroll: true });
       return;
@@ -250,6 +359,16 @@ function initDrawer() {
     const first = focusables[0];
     const last = focusables[focusables.length - 1];
     const active = document.activeElement;
+
+    // If focus is somehow OUTSIDE the panel (a stray script, devtools,
+    // future programmatic shift), pull it back in. The inert+aria-hidden
+    // on background regions makes this unreachable in normal use, but
+    // this is the belt to that braces.
+    if (!panel.contains(active)) {
+      e.preventDefault();
+      first.focus({ preventScroll: true });
+      return;
+    }
 
     if (e.shiftKey && (active === first || active === panel)) {
       e.preventDefault();

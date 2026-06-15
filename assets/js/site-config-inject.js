@@ -18,8 +18,12 @@ import { SITE_CONFIG } from './site-config.js';
 // helper is generic and will likely be reused for header / contact sections.
 // A future config edit must not be able to slip a javascript: URL into an
 // <a href> via setAttribute. Allowlist HTTP(S), tel:, mailto:, and root- /
-// site-relative paths (./, /, ?, #).
-const SAFE_HREF = /^(https?:|tel:|mailto:|[./?#])/i;
+// site-relative paths (./, single-/ but not //, ?, #).
+//
+// `\/(?!\/)` allows `/foo` but rejects `//evil.com` (protocol-relative URLs
+// resolve to the page's scheme + that host, i.e. an off-site redirect on
+// HTTPS pages — same threat class as javascript: but easier to overlook).
+const SAFE_HREF = /^(https?:|tel:|mailto:|\/(?!\/)|[.?#])/i;
 
 // Skip prototype-walking keys when traversing dotted paths. Not exploitable
 // with today's hardcoded SITE_CONFIG, but if the helper is ever extended to
@@ -73,6 +77,15 @@ function hydrate(root = document) {
     const value = readPath(SITE_CONFIG, path);
     if (typeof value !== 'string') {
       warnMissing('data-site-config-path', path);
+      continue;
+    }
+    // Symmetric defense with SAFE_HREF on the href branch: a config value
+    // shouldn't slip through with a leading scheme or // (which would make
+    // the BASE_URL prefix concatenation produce an off-site redirect under
+    // some browsers' URL normalization). Path values are expected to be
+    // relative ("terms/"), no leading slash, no scheme.
+    if (/^([a-z][a-z0-9+.-]*:|\/\/)/i.test(value)) {
+      console.warn(`[site-config-inject] data-site-config-path "${path}" rejected: must be a relative path, not a URL`);
       continue;
     }
     const href = `${import.meta.env.BASE_URL}${value}`;

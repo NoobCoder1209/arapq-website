@@ -9,12 +9,36 @@ import { SITE_CONFIG } from './site-config.js';
 //
 // Supported targets:
 //   <span data-site-config="phone.display">…</span>     -> textContent
-//   <a data-site-config-href="phone.href">…</a>          -> href attribute
+//   <a data-site-config-href="phone.href">…</a>         -> href attribute (scheme-allowlisted)
+//   <a data-site-config-path="policies.terms">…</a>     -> import.meta.env.BASE_URL + value (href attribute)
 //
 // "<path>" is dot-separated (phone.display, address.line1, social.facebook).
 
+// Defense-in-depth: even though SITE_CONFIG values are dev-controlled, the
+// helper is generic and will likely be reused for header / contact sections.
+// A future config edit must not be able to slip a javascript: URL into an
+// <a href> via setAttribute. Allowlist HTTP(S), tel:, mailto:, and root- /
+// site-relative paths (./, /, ?, #).
+const SAFE_HREF = /^(https?:|tel:|mailto:|[./?#])/i;
+
+// Skip prototype-walking keys when traversing dotted paths. Not exploitable
+// with today's hardcoded SITE_CONFIG, but if the helper is ever extended to
+// read paths from URL params or another user-controlled source, this stays a
+// pure-read primitive instead of an Object.prototype reflection.
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 function readPath(obj, path) {
-  return path.split('.').reduce((acc, key) => (acc == null ? acc : acc[key]), obj);
+  return path.split('.').reduce((acc, key) => {
+    if (acc == null) return acc;
+    if (FORBIDDEN_KEYS.has(key)) return undefined;
+    return acc[key];
+  }, obj);
+}
+
+function warnMissing(kind, path) {
+  // Catches typo'd data-site-config="phon.display" attributes early in dev,
+  // before they silently rot. Stays harmless in prod (just a console line).
+  console.warn(`[site-config-inject] ${kind} "${path}" did not resolve to a string in SITE_CONFIG`);
 }
 
 function hydrate(root = document) {
@@ -22,17 +46,37 @@ function hydrate(root = document) {
   for (const el of root.querySelectorAll('[data-site-config]')) {
     const path = el.getAttribute('data-site-config');
     const value = readPath(SITE_CONFIG, path);
-    if (typeof value === 'string' && el.textContent !== value) {
-      el.textContent = value;
+    if (typeof value !== 'string') {
+      warnMissing('data-site-config', path);
+      continue;
     }
+    if (el.textContent !== value) el.textContent = value;
   }
-  // href / src
+  // Direct href (already-formed URL: tel:, mailto:, https:)
   for (const el of root.querySelectorAll('[data-site-config-href]')) {
     const path = el.getAttribute('data-site-config-href');
     const value = readPath(SITE_CONFIG, path);
-    if (typeof value === 'string' && el.getAttribute('href') !== value) {
-      el.setAttribute('href', value);
+    if (typeof value !== 'string') {
+      warnMissing('data-site-config-href', path);
+      continue;
     }
+    if (!SAFE_HREF.test(value)) {
+      console.warn(`[site-config-inject] data-site-config-href "${path}" rejected: unsafe URL scheme`);
+      continue;
+    }
+    if (el.getAttribute('href') !== value) el.setAttribute('href', value);
+  }
+  // Site-relative path that needs the build-time base prefix
+  // (e.g. policies.terms = "terms/" → "/arapq-website/terms/" in prod, "/terms/" in dev)
+  for (const el of root.querySelectorAll('[data-site-config-path]')) {
+    const path = el.getAttribute('data-site-config-path');
+    const value = readPath(SITE_CONFIG, path);
+    if (typeof value !== 'string') {
+      warnMissing('data-site-config-path', path);
+      continue;
+    }
+    const href = `${import.meta.env.BASE_URL}${value}`;
+    if (el.getAttribute('href') !== href) el.setAttribute('href', href);
   }
 }
 

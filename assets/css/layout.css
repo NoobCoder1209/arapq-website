@@ -622,6 +622,15 @@ html.no-js .site-header__menu {
   color: var(--bg-dark);
 }
 
+/* Keyboard a11y: the dark footer drowns the user-agent default focus ring,
+   so paint our own. Same treatment on the policy links below. */
+.social-list a:focus-visible,
+.site-footer__col--policies a:focus-visible,
+.site-footer__contact a:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
 .site-footer__col--policies ul {
   display: flex;
   flex-direction: column;

@@ -247,7 +247,7 @@ export function initBooking() {
     const bungalow = form.querySelector('input[name="bungalow"]')?.value?.trim();
     if (bungalow && modalBody) {
       modalBody.textContent =
-        `A reservations specialist will follow up within twenty-four hours to confirm availability for the ${bungalow} and tailor your stay.`;
+        `A reservations specialist will follow up within twenty-four hours to confirm availability for ${bungalow} and tailor your stay.`;
     }
     if (bungalow && modalTitle) {
       modalTitle.textContent = `Thank you — your ${bungalow} request is in.`;

@@ -28,7 +28,7 @@
         </button>
 
         <!-- Center slot: brand -->
-        <a href="#" class="site-logo" aria-label="Vayana Bungalows home">
+        <a href="#" class="site-logo">
           <span class="site-logo__mark" aria-hidden="true">V</span>
           <span class="site-logo__word">Vayana Bungalows</span>
         </a>
@@ -40,18 +40,6 @@
           </button>
           <a href="#contact" class="btn btn-primary site-header__enquiries">Enquiries</a>
         </div>
-
-        <!-- Primary nav lives in the DOM so the drawer wiring in #3 has nodes to bind to.
-             It is visually hidden via CSS until #3 ships the drawer panel. -->
-        <nav class="primary-nav" aria-label="Primary">
-          <ul id="primary-nav-list" class="primary-nav__list">
-            <li><a href="#">Home</a></li>
-            <li><a href="#rooms">Stay</a></li>
-            <li><a href="#about">Pages</a></li>
-            <li><a href="#">News</a></li>
-            <li><a href="#contact">Contact</a></li>
-          </ul>
-        </nav>
       </div>
     </header>
 
@@ -196,7 +184,7 @@
             <article class="exp-card">
               <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 2v8a4 4 0 008 0V2"/><path d="M10 14v8"/><path d="M18 2c2 0 3 2 3 5s-1 5-3 5v10"/></svg>
               <h5>Gastronomic dine</h5>
-              <p>Three restaurants from a single kitchen garden. Pacific seafood, wood fire, no menu after seven.</p>
+              <p>Three restaurants from a single kitchen garden. Black Sea seafood, wood fire, no menu after seven.</p>
             </article>
           </div>
         </div>
@@ -295,7 +283,8 @@
           </div>
           <div class="contact__col">
             <span class="eyebrow">Phone</span>
-            <p>+359 590 50119</p>
+            <!-- TODO: replace with the real number once available -->
+            <p>+359 590 00000</p>
           </div>
           <div class="contact__col">
             <span class="eyebrow">Email</span>
@@ -309,7 +298,7 @@
     <footer class="site-footer">
       <div class="container site-footer__inner">
         <div class="site-footer__brand">
-          <a href="#" class="site-logo site-logo--light" aria-label="Vayana Bungalows home">
+          <a href="#" class="site-logo site-logo--light">
             <span class="site-logo__mark" aria-hidden="true">V</span>
             <span class="site-logo__word">Vayana Bungalows</span>
           </a>

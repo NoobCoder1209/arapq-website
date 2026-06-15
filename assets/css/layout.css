@@ -161,12 +161,6 @@
   border-color: #5a4c34;
 }
 
-/* Primary nav lives in the DOM for #3 (drawer wiring) but is visually hidden
-   in this issue — the structural recomposition ships the 3 slots only. */
-.primary-nav {
-  display: none;
-}
-
 @media (max-width: 540px) {
   .site-logo__word {
     font-size: 1.125rem;

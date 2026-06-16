@@ -331,26 +331,136 @@
         </div>
       </section>
 
-      <!-- 14. Newsletter band -->
+      <!-- 14. Location (map) — #10.
+           Iframe is lazy-loaded so the map doesn't block LCP and only fetches
+           when scrolled near. The sandbox attribute is set tight on purpose:
+           - allow-scripts: Google Maps embed needs JS to render tiles
+           - allow-same-origin: needed so allow-scripts isn't a null-origin
+             escape hatch (without it, Maps would still load but the embed
+             would treat itself as a unique origin, breaking deep links).
+             Combining the two intentionally gives the iframe normal cross-
+             origin iframe access — i.e. it can run JS in maps.google.com's
+             own origin and read maps.google.com cookies/storage. It cannot
+             touch our DOM, cookies, or storage. The residual trust is the
+             same we'd have embedding any Google product (cf. YouTube): a
+             compromised maps.google.com can run JS in its own origin.
+           - allow-popups: the "View larger map" link inside the embed opens
+             a new tab; without this it's silently swallowed. Note: this
+             allows popups but NOT allow-popups-to-escape-sandbox, so any
+             popup INHERITS the sandbox restrictions.
+           Notably absent: allow-top-navigation, allow-forms, allow-modals,
+           allow-popups-to-escape-sandbox, allow-pointer-lock. A compromised
+           Maps embed cannot navigate this page, submit forms, or pop dialogs.
+           referrerpolicy="strict-origin-when-cross-origin" matches the modern
+           browser default — only the origin (no path / query) leaks to
+           maps.google.com. Pinning it makes the intent explicit for future
+           readers and guards against older browsers' looser defaults.
+
+           Graceful degradation (negative test #4): the iframe is opacity:0
+           until JS adds .is-loaded to .location__map (assets/js/location.js).
+           If google.com is blocked / aborted / never loads, .is-loaded is
+           never added and the .location__fallback paragraph stays visible.
+           Address + plus code below the iframe are visible regardless. -->
+      <section id="location" class="section section-cream" aria-labelledby="location-title">
+        <div class="container location__inner reveal">
+          <span class="eyebrow">Tsarevo, Bulgaria</span>
+          <h3 id="location-title">Find us</h3>
+          <div class="location__map">
+            <p class="location__fallback">Map unavailable &mdash; see address below.</p>
+            <iframe
+              src="https://maps.google.com/maps?q=42.1885867,27.8350773&amp;z=17&amp;output=embed"
+              title="Map showing Vayana Bungalows in Tsarevo, Bulgaria"
+              loading="lazy"
+              width="800" height="450"
+              referrerpolicy="strict-origin-when-cross-origin"
+              sandbox="allow-scripts allow-same-origin allow-popups"></iframe>
+          </div>
+          <div class="location__details">
+            <p class="location__address">
+              <span data-site-config="address.street">ul. Kraybrezhna 1, Tsarevo</span><br />
+              <span data-site-config="address.country">Bulgaria</span><br />
+              <span class="location__plus-code">Plus Code: <span class="location__plus-code-value" data-site-config="address.plusCode">5RQP+C2 Tsarevo</span></span>
+            </p>
+            <a class="btn btn-outline-dark location__directions"
+               href="https://maps.app.goo.gl/szcFXV6f5Pgx2iFt5"
+               target="_blank" rel="noopener noreferrer"
+               data-location-directions>
+              Get directions
+              <span class="sr-only">(opens Google Maps in a new tab)</span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- 15. Newsletter band — "Stay with us" (#10).
+           Stub-only in v1: the form has full JS validation and a honeypot,
+           but submit just opens a "Thank you" .modal — no network request
+           goes anywhere. Real ESP wiring tracked in #19.
+           The <noscript> fallback below the form keeps the page usable
+           (mailto:) when JS is off, satisfying negative test #7. -->
       <section class="newsletter" aria-labelledby="newsletter-title">
         <div class="newsletter__bg" data-parallax="0.15"></div>
         <div class="newsletter__overlay"></div>
         <div class="container newsletter__content reveal">
-          <span class="eyebrow eyebrow--light">Stay tuned with Vayana Bungalows</span>
-          <h4 id="newsletter-title">Quiet news from the island, three or four times a year.</h4>
-          <form class="newsletter__form" onsubmit="event.preventDefault();">
+          <span class="eyebrow eyebrow--light">Notes from the bay</span>
+          <h4 id="newsletter-title">Stay with us</h4>
+          <p class="newsletter__lede">Quiet notes from the island &mdash; three or four a year, never more.</p>
+          <form class="newsletter__form" data-newsletter-form novalidate>
             <label class="sr-only" for="nl-email">Email address</label>
-            <input id="nl-email" type="email" placeholder="Your email address" />
-            <button type="submit" class="btn btn-primary">Subscribe</button>
+            <input id="nl-email" name="email" type="email" required
+                   autocomplete="email" placeholder="Your email address"
+                   data-newsletter-email />
+            <!-- Honeypot: bots that auto-fill every field will trip this.
+                 Hidden via CSS (off-screen, tabindex -1, aria-hidden) rather
+                 than display:none so a real keyboard user can't reach it but
+                 a naive form-filler still sees a "website" field worth
+                 filling. The submit handler simulates the success path on
+                 trip — same DOM mutations as a valid submit, but no ESP
+                 request — so a bot diffing the page can't tell whether it
+                 was honeypotted. -->
+            <div class="newsletter__hp" aria-hidden="true">
+              <label for="nl-website">Website</label>
+              <input id="nl-website" name="website" type="text"
+                     tabindex="-1" autocomplete="off"
+                     data-newsletter-honeypot />
+            </div>
+            <button type="submit" class="btn btn-primary"
+                    data-newsletter-submit disabled>Subscribe</button>
+            <p class="newsletter__error" data-newsletter-error
+               aria-live="polite" hidden></p>
           </form>
           <label class="newsletter__consent">
-            <input type="checkbox" />
-            <span>I agree to the privacy terms.</span>
+            <input type="checkbox" required data-newsletter-consent />
+            <span>I agree to the
+              <a data-site-config-path="policies.privacy" href="/privacy/">Privacy Policy</a>
+              and consent to receiving occasional emails from Vayana Bungalows.</span>
           </label>
+          <noscript>
+            <p class="newsletter__noscript">
+              Subscribe by emailing
+              <a data-site-config-href="email.href" href="mailto:contact@vayanabungalows.com">contact@vayanabungalows.com</a>
+              with the subject "Subscribe".
+            </p>
+          </noscript>
         </div>
       </section>
 
-      <!-- 15. Contact info row.
+      <!-- "Thank you" modal for the newsletter stub (#10). Reuses the
+           .modal pattern (sections.css). Hidden by default; the newsletter
+           module flips `hidden`, focuses the close button, and restores
+           focus to the original trigger on close. -->
+      <div class="modal" id="newsletter-modal" hidden role="dialog" aria-modal="true" aria-labelledby="newsletter-modal-title">
+        <div class="modal__backdrop" data-modal-close></div>
+        <div class="modal__panel">
+          <button class="modal__close" type="button" aria-label="Close" data-modal-close>&times;</button>
+          <span class="eyebrow">Subscribed</span>
+          <h3 id="newsletter-modal-title">Thank you &mdash; you're on the list.</h3>
+          <p>We'll send a quiet note when there's something worth sharing &mdash; no more than four a year.</p>
+          <button type="button" class="btn btn-primary" data-modal-close>Close</button>
+        </div>
+      </div>
+
+      <!-- 16. Contact info row.
            Phone / email / address all hydrate from assets/js/site-config.js
            via [data-site-config*] attributes (#9). The phone and email are
            shared with the footer + header / drawer; the street address is
@@ -386,7 +496,7 @@
       </section>
     </main>
 
-    <!-- 16. Footer -->
+    <!-- 17. Footer -->
     <footer class="site-footer">
       <div class="container site-footer__inner">
         <!-- Column 1 — Contact -->

@@ -5,6 +5,8 @@ import { initSliders } from './slider.js';
 import { initBooking } from './booking.js';
 import { initVideo } from './video.js';
 import { initSiteConfig } from './site-config-inject.js';
+import { initNewsletter } from './newsletter.js';
+import { initLocation } from './location.js';
 
 // The JS-on / JS-off CSS gate is set by an inline <head> script before any
 // stylesheet loads (each HTML page renders class="no-js" on <html> and the
@@ -32,6 +34,8 @@ const run = () => {
   initSliders();
   initBooking();
   initVideo();
+  initNewsletter();
+  initLocation();
 };
 
 if (document.readyState === 'loading') {

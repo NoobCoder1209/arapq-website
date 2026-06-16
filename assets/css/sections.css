@@ -628,6 +628,96 @@
   }
 }
 
+/* ========== Location (map) — #10 ========== */
+.location__inner {
+  text-align: center;
+  max-width: 720px;
+}
+
+.location__inner .eyebrow {
+  display: block;
+  margin-bottom: var(--space-2);
+}
+
+.location__inner h3 {
+  margin-bottom: var(--space-4);
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+}
+
+/* Map ratio: 16:9 desktop, 4:3 mobile (issue #10 spec).
+   The fallback paragraph is absolutely positioned BEHIND the iframe; if
+   *.google.com is blocked the iframe stays empty/transparent and the
+   fallback shows through. When the iframe loads it covers the fallback. */
+.location__map {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--bg-light);
+  border: 1px solid var(--border);
+  margin-bottom: var(--space-4);
+  overflow: hidden;
+}
+
+.location__map iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.location__fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: var(--space-3);
+  color: var(--text-muted);
+  font-style: italic;
+  text-align: center;
+}
+
+.location__details {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.location__address {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  line-height: 1.6;
+  color: var(--text-dark);
+}
+
+.location__plus-code {
+  display: inline-block;
+  margin-top: var(--space-1);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.location__plus-code code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.95em;
+  background: rgba(0, 0, 0, 0.04);
+  padding: 0.1em 0.4em;
+  border-radius: 2px;
+}
+
+@media (max-width: 560px) {
+  .location__map {
+    aspect-ratio: 4 / 3;
+  }
+}
+
 /* ========== Newsletter ========== */
 .newsletter {
   position: relative;
@@ -659,9 +749,15 @@
 }
 
 .newsletter__content h4 {
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-2);
   font-size: clamp(1.25rem, 2.5vw, 1.75rem);
   line-height: 1.4;
+}
+
+.newsletter__lede {
+  margin-bottom: var(--space-4);
+  color: rgba(238, 238, 238, 0.85);
+  font-size: 0.95rem;
 }
 
 .newsletter__form {
@@ -669,9 +765,10 @@
   gap: 0;
   background: var(--bg-light);
   padding: 0;
+  position: relative;
 }
 
-.newsletter__form input {
+.newsletter__form input[type="email"] {
   flex: 1;
   border: 0;
   background: var(--bg-light);
@@ -680,28 +777,90 @@
   min-height: 56px;
 }
 
+.newsletter__form input[type="email"]:invalid:not(:placeholder-shown) {
+  /* Keyboard hint: invalid email gets a red underline AFTER the user has
+     typed something. Avoids the "everything is red on page load" anti-pattern
+     of styling :invalid alone (empty == invalid for required fields). */
+  box-shadow: inset 0 -2px 0 var(--danger, #c0392b);
+}
+
 .newsletter__form .btn {
   min-height: 56px;
   padding: 0 1.75rem;
   flex-shrink: 0;
 }
 
+/* Honeypot: invisible to humans, present in the DOM for naive bots.
+   Off-screen rather than display:none so accessibility-tree-aware bots
+   that ignore display:none still see and fill it. tabindex=-1 + aria-hidden
+   keep keyboard + screen-reader users out of it. */
+.newsletter__hp {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.newsletter__error {
+  flex-basis: 100%;
+  margin: var(--space-2) 0 0;
+  padding: 0.5rem 0.75rem;
+  background: rgba(192, 57, 43, 0.15);
+  color: #ffd6d0;
+  font-size: 0.9rem;
+  text-align: left;
+  border-left: 2px solid var(--danger, #c0392b);
+}
+
 .newsletter__consent {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.5rem;
-  margin-top: var(--space-2);
+  margin-top: var(--space-3);
   font-size: 0.85rem;
   color: rgba(238, 238, 238, 0.75);
   text-transform: none;
   letter-spacing: 0.02em;
+  text-align: left;
+  max-width: 560px;
 }
 
 .newsletter__consent input {
   width: auto;
   min-height: 0;
   margin: 0;
+  margin-top: 0.2em;
   accent-color: var(--primary);
+  flex-shrink: 0;
+}
+
+.newsletter__consent a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+/* Highlighted state when the user tries to submit without consent.
+   Set + cleared by newsletter.js on the consent <label>. */
+.newsletter__consent.is-error {
+  color: #ffd6d0;
+}
+
+.newsletter__consent.is-error input {
+  outline: 2px solid var(--danger, #c0392b);
+  outline-offset: 2px;
+}
+
+.newsletter__noscript {
+  margin-top: var(--space-3);
+  font-size: 0.9rem;
+  color: rgba(238, 238, 238, 0.85);
+}
+
+.newsletter__noscript a {
+  color: inherit;
+  text-decoration: underline;
 }
 
 @media (max-width: 560px) {
@@ -710,7 +869,7 @@
     gap: 1px;
     background: var(--border);
   }
-  .newsletter__form input,
+  .newsletter__form input[type="email"],
   .newsletter__form .btn {
     width: 100%;
   }

@@ -20,6 +20,11 @@
   --border: #b5bbb3;
   --border-soft: rgba(0, 0, 0, 0.08);
 
+  /* Validation / error tone — used by form error pills, invalid input
+     underlines, and consent error outlines. Picked for ~5.6:1 contrast
+     against --bg-light, ~4.7:1 against the dark newsletter overlay. */
+  --danger: #c0392b;
+
   /* Typography */
   --font-heading: 'Marcellus', 'Times New Roman', serif;
   --font-body: 'Jost', system-ui, sans-serif;

@@ -331,28 +331,36 @@
         </div>
       </section>
 
-      <!-- 13b. Location (map) — #10.
+      <!-- 14. Location (map) — #10.
            Iframe is lazy-loaded so the map doesn't block LCP and only fetches
            when scrolled near. The sandbox attribute is set tight on purpose:
            - allow-scripts: Google Maps embed needs JS to render tiles
            - allow-same-origin: needed so allow-scripts isn't a null-origin
              escape hatch (without it, Maps would still load but the embed
              would treat itself as a unique origin, breaking deep links).
-             Combining the two intentionally gives the iframe the same access
-             a normal cross-origin iframe would have, no more.
+             Combining the two intentionally gives the iframe normal cross-
+             origin iframe access — i.e. it can run JS in maps.google.com's
+             own origin and read maps.google.com cookies/storage. It cannot
+             touch our DOM, cookies, or storage. The residual trust is the
+             same we'd have embedding any Google product (cf. YouTube): a
+             compromised maps.google.com can run JS in its own origin.
            - allow-popups: the "View larger map" link inside the embed opens
-             a new tab; without this it's silently swallowed.
-           Notably absent: allow-top-navigation, allow-forms, allow-modals.
-           A compromised Maps embed cannot navigate this page or pop dialogs.
-           referrerpolicy="no-referrer-when-downgrade" matches the default
-           but pinning it makes the intent explicit for future readers.
+             a new tab; without this it's silently swallowed. Note: this
+             allows popups but NOT allow-popups-to-escape-sandbox, so any
+             popup INHERITS the sandbox restrictions.
+           Notably absent: allow-top-navigation, allow-forms, allow-modals,
+           allow-popups-to-escape-sandbox, allow-pointer-lock. A compromised
+           Maps embed cannot navigate this page, submit forms, or pop dialogs.
+           referrerpolicy="strict-origin-when-cross-origin" matches the modern
+           browser default — only the origin (no path / query) leaks to
+           maps.google.com. Pinning it makes the intent explicit for future
+           readers and guards against older browsers' looser defaults.
 
-           Graceful degradation (negative test #4): the .location__fallback
-           paragraph sits BEHIND the iframe. If *.google.com is blocked, the
-           iframe load fails and the fallback shows through. The CSS keeps
-           it visible at all times — fine because the iframe covers it when
-           the map renders. Address + plus code below the iframe are always
-           visible regardless of iframe state. -->
+           Graceful degradation (negative test #4): the iframe is opacity:0
+           until JS adds .is-loaded to .location__map (assets/js/location.js).
+           If google.com is blocked / aborted / never loads, .is-loaded is
+           never added and the .location__fallback paragraph stays visible.
+           Address + plus code below the iframe are visible regardless. -->
       <section id="location" class="section section-cream" aria-labelledby="location-title">
         <div class="container location__inner reveal">
           <span class="eyebrow">Tsarevo, Bulgaria</span>
@@ -360,21 +368,23 @@
           <div class="location__map">
             <p class="location__fallback">Map unavailable &mdash; see address below.</p>
             <iframe
-              src="https://maps.google.com/maps?q=5RQP%2BC2%20Tsarevo%2C%20Bulgaria&output=embed"
+              src="https://maps.google.com/maps?q=42.1885867,27.8350773&z=17&output=embed"
               title="Map showing Vayana Bungalows in Tsarevo, Bulgaria"
               loading="lazy"
-              referrerpolicy="no-referrer-when-downgrade"
+              width="800" height="450"
+              referrerpolicy="strict-origin-when-cross-origin"
               sandbox="allow-scripts allow-same-origin allow-popups"></iframe>
           </div>
           <div class="location__details">
             <p class="location__address">
               <span data-site-config="address.street">ul. Kraybrezhna 1, Tsarevo</span><br />
               <span data-site-config="address.country">Bulgaria</span><br />
-              <span class="location__plus-code">Plus Code: <code>5RQP+C2 Tsarevo</code></span>
+              <span class="location__plus-code">Plus Code: <code data-location-plus-code>5RQP+C2 Tsarevo</code></span>
             </p>
             <a class="btn btn-outline-dark location__directions"
                href="https://maps.app.goo.gl/szcFXV6f5Pgx2iFt5"
-               target="_blank" rel="noopener noreferrer">
+               target="_blank" rel="noopener noreferrer"
+               data-location-directions>
               Get directions
               <span class="sr-only">(opens Google Maps in a new tab)</span>
             </a>
@@ -382,10 +392,10 @@
         </div>
       </section>
 
-      <!-- 14. Newsletter band — "Stay with us" (#10).
-           Stub-only in v1: the form has full HTML5 + JS validation and a
-           honeypot, but submit just opens a "Thank you" .modal — no network
-           request goes anywhere. Real ESP wiring tracked in #14-future.
+      <!-- 15. Newsletter band — "Stay with us" (#10).
+           Stub-only in v1: the form has full JS validation and a honeypot,
+           but submit just opens a "Thank you" .modal — no network request
+           goes anywhere. Real ESP wiring tracked in #19.
            The <noscript> fallback below the form keeps the page usable
            (mailto:) when JS is off, satisfying negative test #7. -->
       <section class="newsletter" aria-labelledby="newsletter-title">
@@ -404,7 +414,10 @@
                  Hidden via CSS (off-screen, tabindex -1, aria-hidden) rather
                  than display:none so a real keyboard user can't reach it but
                  a naive form-filler still sees a "website" field worth
-                 filling. The submit handler rejects any non-empty value. -->
+                 filling. The submit handler simulates the success path on
+                 trip — same DOM mutations as a valid submit, but no ESP
+                 request — so a bot diffing the page can't tell whether it
+                 was honeypotted. -->
             <div class="newsletter__hp" aria-hidden="true">
               <label for="nl-website">Website</label>
               <input id="nl-website" name="website" type="text"
@@ -413,7 +426,8 @@
             </div>
             <button type="submit" class="btn btn-primary"
                     data-newsletter-submit disabled>Subscribe</button>
-            <p class="newsletter__error" data-newsletter-error role="alert" hidden></p>
+            <p class="newsletter__error" data-newsletter-error
+               aria-live="polite" hidden></p>
           </form>
           <label class="newsletter__consent">
             <input type="checkbox" required data-newsletter-consent />
@@ -433,7 +447,8 @@
 
       <!-- "Thank you" modal for the newsletter stub (#10). Reuses the
            .modal pattern (sections.css). Hidden by default; the newsletter
-           module flips `hidden` and traps focus on the close button. -->
+           module flips `hidden`, focuses the close button, and restores
+           focus to the original trigger on close. -->
       <div class="modal" id="newsletter-modal" hidden role="dialog" aria-modal="true" aria-labelledby="newsletter-modal-title">
         <div class="modal__backdrop" data-modal-close></div>
         <div class="modal__panel">
@@ -445,7 +460,7 @@
         </div>
       </div>
 
-      <!-- 15. Contact info row.
+      <!-- 16. Contact info row.
            Phone / email / address all hydrate from assets/js/site-config.js
            via [data-site-config*] attributes (#9). The phone and email are
            shared with the footer + header / drawer; the street address is
@@ -481,7 +496,7 @@
       </section>
     </main>
 
-    <!-- 16. Footer -->
+    <!-- 17. Footer -->
     <footer class="site-footer">
       <div class="container site-footer__inner">
         <!-- Column 1 — Contact -->

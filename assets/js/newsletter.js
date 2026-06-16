@@ -3,7 +3,8 @@
 // v1 behaviour: validate email + consent + honeypot, then open the
 // "Thank you" .modal. NO network request goes anywhere.
 //
-// TODO: wire to real ESP — see follow-up issue #14.
+// TODO: wire to real ESP — see follow-up issue
+//   https://github.com/NoobCoder1209/arapq-website/issues/19
 //
 // The submit button is rendered `disabled` in HTML and only enabled by
 // this module on init. That's the JS-disabled fallback (negative test #7):
@@ -11,46 +12,71 @@
 // below the form is the call-to-action instead. With JS, the button
 // enables and full validation runs.
 
-// RFC-5322-ish email check. Deliberately stricter than HTML5's `type=email`
-// (which accepts e.g. "a@b" with no TLD) but still permissive enough not to
-// reject anything real users would type. The HTML5 `required` + browser
-// validation runs first as a cheap pre-check; this is the JS belt-and-braces.
+// Stricter than HTML5's `type=email` (which accepts "a@b" with no TLD).
+// The form ships with `novalidate` so HTML5 enforcement is disabled by
+// design — this regex IS the validation, not belt-and-braces. The 254-char
+// length cap below runs first and short-circuits before regex evaluation,
+// which keeps catastrophic-input cost bounded even though the regex itself
+// is non-backtracking (no nested quantifiers, no overlapping alternations).
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-// Cap email length BEFORE regex evaluation. Without this, a pasted-in
-// pathological string could exercise the regex's backtracking. The regex
-// above is non-backtracking (no nested quantifiers) so this is belt-and-
-// braces, but cheap to enforce and useful when we wire to a real ESP that
-// will reject overlong values anyway.
+// RFC 5321's hard limit on a deliverable address. Anything longer is either
+// pasted nonsense or an attack — reject before regex evaluation.
 const MAX_EMAIL_LEN = 254;
+
+// Generic error to show on any email-shape problem. Same message regardless
+// of whether the input was empty / too long / regex-failed — gives an
+// attacker no signal about thresholds, and matches the typical sign-up
+// form pattern users already recognize.
+const EMAIL_ERROR_MSG = 'Please enter a valid email address.';
+const CONSENT_ERROR_MSG = 'Please accept the Privacy Policy to subscribe.';
 
 export function initNewsletter() {
   const form = document.querySelector('[data-newsletter-form]');
   if (!form) return;
 
+  // Idempotency guard: re-running initNewsletter() (HMR, future SPA nav,
+  // double-import) would stack a second `keydown` listener on document.
+  // Mark the form on first init so subsequent calls bail early.
+  if (form.dataset.newsletterInit === '1') return;
+  form.dataset.newsletterInit = '1';
+
   const email = form.querySelector('[data-newsletter-email]');
   const honeypot = form.querySelector('[data-newsletter-honeypot]');
   const submit = form.querySelector('[data-newsletter-submit]');
   const errorEl = form.querySelector('[data-newsletter-error]');
-  // Consent lives outside the <form> in the markup (it sits below as a
-  // separate <label class="newsletter__consent">), so query the document.
-  const consentLabel = document.querySelector('.newsletter__consent');
-  const consentInput = consentLabel?.querySelector('input[type="checkbox"]');
+  // Consent input lives outside the <form> in the markup (sits below as a
+  // separate <label class="newsletter__consent">). Use the data attribute
+  // hook rather than the visual class — the class is more likely to be
+  // renamed in a redesign.
+  const consentInput = document.querySelector('[data-newsletter-consent]');
+  const consentLabel = consentInput?.closest('.newsletter__consent');
   const modal = document.getElementById('newsletter-modal');
 
-  if (!email || !submit || !consentInput || !modal) return;
+  // Hard requirements: bail and warn on any missing element so future pages
+  // that try to reuse this module without the full markup get a clear hint
+  // in the console (rather than a half-wired form that silently misbehaves).
+  const missing = [];
+  if (!email) missing.push('[data-newsletter-email]');
+  if (!submit) missing.push('[data-newsletter-submit]');
+  if (!errorEl) missing.push('[data-newsletter-error]');
+  if (!consentInput) missing.push('[data-newsletter-consent]');
+  if (!modal) missing.push('#newsletter-modal');
+  if (!honeypot) missing.push('[data-newsletter-honeypot]');
+  if (missing.length) {
+    console.warn('[newsletter] missing required elements:', missing.join(', '));
+    return;
+  }
 
   // Enable the submit button only once JS has wired up validation.
   // The HTML ships it disabled (negative test #7 fallback).
   submit.disabled = false;
 
   const showError = (msg) => {
-    if (!errorEl) return;
     errorEl.textContent = msg;
     errorEl.hidden = false;
   };
   const clearError = () => {
-    if (!errorEl) return;
     errorEl.textContent = '';
     errorEl.hidden = true;
   };
@@ -65,71 +91,86 @@ export function initNewsletter() {
     if (consentInput.checked) flagConsent(false);
   });
 
+  // Track the element that had focus before the modal opened so we can
+  // restore it on close (a11y: prevents the screen-reader's reading
+  // position from snapping back to <body>).
+  let lastFocusBeforeModal = null;
+
+  const successPath = () => {
+    openModal(modal, () => lastFocusBeforeModal);
+    // form.reset() only resets fields INSIDE the <form> element. The
+    // consent checkbox sits outside (deliberately), so reset it manually.
+    // Without this, the next user on the same machine inherits the
+    // previous user's consent state.
+    form.reset();
+    consentInput.checked = false;
+    flagConsent(false);
+    clearError();
+  };
+
   form.addEventListener('submit', (e) => {
     // ALWAYS preventDefault first — even on bot/honeypot trips. Default
-    // submit would attempt a same-origin POST to the page URL, which a)
-    // 404s under Vite dev and b) leaks the email to the URL on GH Pages
-    // (no server, request silently fails but referrers carry the data).
+    // submit would attempt a same-origin GET to the page URL with the
+    // email in the query string, which a) leaks the email into the URL
+    // bar / referer chain on GitHub Pages and b) navigates the page
+    // away. We never want either, regardless of which validation branch
+    // we end up in.
     e.preventDefault();
-    clearError();
-    flagConsent(false);
 
-    // Honeypot: any non-empty value = bot. Silently swallow — don't tell the
-    // bot what tripped it, just no-op so the bot's logs say "submitted OK".
-    // This is intentionally NOT showing the success modal either; a real
-    // user can't reach this field, so a non-empty value is unambiguous bot
-    // signal and we don't want to feed back ANY signal to retry against.
-    if (honeypot && honeypot.value.trim() !== '') {
-      // No modal, no error — pure no-op.
+    // Capture the trigger BEFORE any DOM mutation that might steal focus.
+    lastFocusBeforeModal = document.activeElement;
+
+    // Honeypot: any non-empty value = bot. SIMULATE the success path so
+    // a bot DOM-diffing the page can't tell honeypot-trip from a valid
+    // submit. No ESP request goes out either way in v1; in v2 (#14) the
+    // success path will fire the request, and the honeypot path won't —
+    // that's the only divergence, invisible from the bot's vantage.
+    if (honeypot.value.trim() !== '') {
+      successPath();
       return;
     }
 
     const value = (email.value || '').trim();
 
     if (value.length === 0) {
-      showError('Please enter an email address.');
+      showError(EMAIL_ERROR_MSG);
       email.focus();
       return;
     }
-    if (value.length > MAX_EMAIL_LEN) {
-      showError('That email address is too long.');
-      email.focus();
-      return;
-    }
-    if (!EMAIL_RE.test(value)) {
-      showError('Please enter a valid email address.');
+    // Length cap runs before regex — bounds worst-case input even though
+    // the regex itself is non-backtracking. Same generic error message
+    // as the regex branch (gives no implementation detail away).
+    if (value.length > MAX_EMAIL_LEN || !EMAIL_RE.test(value)) {
+      showError(EMAIL_ERROR_MSG);
       email.focus();
       return;
     }
     if (!consentInput.checked) {
-      showError('Please accept the Privacy Policy to subscribe.');
+      showError(CONSENT_ERROR_MSG);
       flagConsent(true);
       consentInput.focus();
       return;
     }
 
-    // Stub: open the "Thank you" modal. NO fetch, NO XHR, NO sendBeacon.
+    // All good — open the modal. NO fetch, NO XHR, NO sendBeacon.
     // (Confirmed by negative test #5 — DevTools network tab must show no
     // outgoing request after submit in v1.)
-    openModal(modal);
-
-    // Reset form so the same browser session can subscribe again (e.g. a
-    // family member on the same machine) without leaving the email field
-    // pre-filled with someone else's address.
-    form.reset();
+    successPath();
   });
 
   // Modal close wiring — same pattern as booking.js (.modal__backdrop,
   // .modal__close, .btn[data-modal-close]).
   modal.querySelectorAll('[data-modal-close]').forEach((el) => {
-    el.addEventListener('click', () => closeModal(modal));
+    el.addEventListener('click', () => closeModal(modal, lastFocusBeforeModal));
   });
+  // Single document-level Escape handler — guarded by the idempotency
+  // check at the top of initNewsletter(), so we never stack two of them.
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !modal.hidden) closeModal(modal);
+    if (e.key === 'Escape' && !modal.hidden) closeModal(modal, lastFocusBeforeModal);
   });
 }
 
-function openModal(modal) {
+function openModal(modal, getReturnFocusEl) {
   modal.hidden = false;
   document.body.style.overflow = 'hidden';
   // Focus the close button — same convention as the booking modal: the
@@ -141,7 +182,14 @@ function openModal(modal) {
   focusable?.focus();
 }
 
-function closeModal(modal) {
+function closeModal(modal, returnFocusTo) {
   modal.hidden = true;
   document.body.style.overflow = '';
+  // Restore focus to whatever the user was on before the modal opened.
+  // Guard against the element having been removed from the DOM, or being
+  // a non-focusable node (e.g. <body>).
+  if (returnFocusTo && typeof returnFocusTo.focus === 'function'
+      && document.contains(returnFocusTo)) {
+    returnFocusTo.focus();
+  }
 }

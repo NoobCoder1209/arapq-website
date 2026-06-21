@@ -1599,3 +1599,173 @@
     grid-column: 1;
   }
 }
+
+/* ========== /stay/ index page (#12) ==========
+   Standalone listing of the 3 bungalows. Reuses the existing
+   .room-card pattern (defined above) but renders the cards in a
+   stable 3-up CSS grid instead of the homepage's horizontal scroller
+   — the index page should show every option at once. The hero is a
+   sibling of .bungalow-hero (same background-image technique) but
+   scoped to .stay-hero so the height + overlay tuning can diverge. */
+
+.stay-hero {
+  position: relative;
+  min-height: clamp(360px, 50vh, 520px);
+  display: flex;
+  align-items: flex-end;
+  padding: var(--section-pad-y) 0;
+  background-size: cover;
+  background-position: center;
+  /* Defensive parity with .bungalow-hero — at any normal viewport the
+     `cover` sizing fills the section, but a viewport that's wider
+     than the image aspect-ratio could repeat-tile without this.
+     Round-1 review finding I4. */
+  background-repeat: no-repeat;
+  color: var(--text-light);
+  /* Inline background-image url() on the section is rewritten by Vite
+     at build time, so the dev path stays /assets/img/intro-villa.jpg
+     and the prod path picks up the /arapq-website/ base prefix. */
+}
+
+.stay-hero::before {
+  /* Dark overlay for legibility — anchored to the section so the
+     gradient doesn't drift if the image aspect-ratio changes. The
+     direction tapers from full-black at the bottom (where the title
+     sits) to ~25% at the top, preserving as much of the photograph
+     as we can while still reading the type. */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(14, 13, 10, 0.85) 0%, rgba(14, 13, 10, 0.35) 60%, rgba(14, 13, 10, 0.2) 100%);
+  pointer-events: none;
+}
+
+.stay-hero > .container {
+  position: relative; /* sit above the overlay */
+  z-index: 1;
+}
+
+.stay-hero h1 {
+  margin-bottom: var(--space-2);
+  font-size: clamp(2.5rem, 6vw, var(--fs-h1));
+  letter-spacing: 0.01em;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35);
+}
+
+.stay-hero__sub {
+  font-size: var(--fs-lg);
+  font-weight: 300;
+  letter-spacing: 0.04em;
+  max-width: 640px;
+  margin: 0;
+  opacity: 0.94;
+}
+
+/* Prose intro (above the cards). Section-cream background gives the
+   page a calm reading band between the dark hero and the white card
+   grid. */
+.stay-intro {
+  background: var(--bg-cream);
+  padding: var(--section-pad-y) 0;
+  color: var(--text-dark);
+}
+
+.stay-intro__inner {
+  max-width: 720px;
+  /* Center the prose under the centered cards section below it. */
+  margin: 0 auto;
+  text-align: center;
+}
+
+.stay-intro__lede {
+  font-family: var(--font-heading);
+  font-size: clamp(1.25rem, 2.4vw, 1.65rem);
+  line-height: 1.5;
+  margin-bottom: var(--space-4);
+  color: var(--text-dark);
+}
+
+.stay-intro p {
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+}
+
+.stay-intro p:last-child {
+  margin-bottom: 0;
+}
+
+/* Card grid — 3 columns on wide, 2 on tablet, 1 on mobile. Important:
+   .room-card on the homepage uses `flex: 0 0 auto` + an explicit
+   `width: clamp(...)` because it lives inside a horizontal flex
+   scroller. In a CSS grid, `flex` shorthand is ignored, but the
+   explicit `width` would override the grid track sizing. Reset it
+   here so grid columns can size the cards naturally. */
+.stay-cards {
+  padding: var(--section-pad-y) 0;
+  background: var(--bg-light);
+}
+
+.stay-cards__head {
+  text-align: center;
+  max-width: 640px;
+  margin: 0 auto var(--space-6);
+}
+
+.stay-cards__head h2 {
+  margin-bottom: 0;
+}
+
+.stay-cards__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-5);
+}
+
+.stay-cards__grid .room-card {
+  /* Reset the homepage scroller-specific width so the grid track owns
+     the card's horizontal size. */
+  width: auto;
+  flex: initial;
+}
+
+/* The .room-card__body rules above style <h4> for the homepage
+   scroller. On /stay/ the cards use <h3> (proper heading-level
+   nesting: page <h1>, section <h2>, card <h3>). The visual weight
+   we need is identical to the <h4> rule above (line 379); we don't
+   re-declare font-family because base.css's `h1, h2, h3, h4, h5, h6`
+   rule already sets var(--font-heading) globally (round-1 review
+   finding I3; round-2 R2-3 swaps the line-number reference for a
+   selector reference because comment line numbers rot). Scoped to
+   the grid so the homepage <h4> rules stay untouched. */
+.stay-cards__grid .room-card__body h3 {
+  margin-bottom: 0.4rem;
+  font-size: var(--fs-h5);
+}
+
+/* .room-card__lede is intentionally page-scoped under .stay-cards__grid:
+   the homepage's .room-card pattern uses only an h4 + price + CTA, so
+   "lede" wouldn't ever render unstyled there. If this class moves
+   anywhere outside /stay/ later, lift the rule out of the grid scope.
+   Round-1 review finding N1. */
+.stay-cards__grid .room-card__lede {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin-bottom: 0.6rem;
+  padding: 0 var(--space-2);
+}
+
+@media (max-width: 960px) {
+  .stay-cards__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .stay-cards__grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+}

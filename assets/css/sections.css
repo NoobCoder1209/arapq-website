@@ -7,8 +7,11 @@
   display: flex;
   align-items: center;
   color: var(--bg-light);
-  margin-top: -88px; /* tuck under sticky header */
-  padding-top: 88px;
+  /* Tuck under the sticky header so the photo runs to the viewport edge.
+     Same pattern used by .stay-hero and .bungalow-hero — see tokens.css
+     `--header-height` for the single source of truth. */
+  margin-top: calc(var(--header-height) * -1);
+  padding-top: var(--header-height);
   overflow: hidden;
 }
 
@@ -1088,11 +1091,17 @@
   display: flex;
   align-items: flex-end;
   color: var(--bg-light);
-  padding-top: var(--space-12);
+  /* Tuck under the sticky header so the photo runs to the viewport edge
+     and the white header CTAs (hamburger, logo, phone) read against the
+     photograph instead of white-on-white. Same pattern as .hero and
+     .stay-hero — see tokens.css `--header-height`. */
+  margin-top: calc(var(--header-height) * -1);
+  padding-top: calc(var(--space-12) + var(--header-height));
   padding-bottom: var(--space-8);
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
+  overflow: hidden;
 }
 
 .bungalow-hero::after {
@@ -1613,23 +1622,13 @@
   min-height: clamp(360px, 50vh, 520px);
   display: flex;
   align-items: flex-end;
-  /* Pull the hero up underneath the sticky header so the photograph
-     fills the viewport edge-to-edge at the top. Without this, the
-     header's transparent-at-rest state sits on an 88px-tall strip of
-     the white <body> background, which means the white hamburger /
-     logo / phone-pill content ends up white-on-white and reads as
-     "invisible" until the user scrolls past the hero and the header
-     flips to .is-scrolled. With the hero extended under the header,
-     the same white content sits against the darker top portion of
-     the photograph + the overlay gradient below, which gives the
-     contrast the design was originally counting on.
-     The padding-top adds the header's height back so the visible
-     hero text ("Stay with us" + subhead) keeps the same internal
-     spacing it had before — the only thing that changed is what's
-     painted behind the header, not where the type lands.
-     88px matches .site-header__inner's min-height. */
-  margin-top: -88px;
-  padding: calc(var(--section-pad-y) + 88px) 0 var(--section-pad-y);
+  /* Tuck under the sticky header so the photo runs to the viewport
+     edge, otherwise the white header CTAs render white-on-white over
+     the page's body background until scroll triggers .is-scrolled.
+     Same pattern as .hero and .bungalow-hero — see tokens.css
+     `--header-height` for the single source of truth. */
+  margin-top: calc(var(--header-height) * -1);
+  padding: calc(var(--section-pad-y) + var(--header-height)) 0 var(--section-pad-y);
   background-size: cover;
   background-position: center;
   /* Defensive parity with .bungalow-hero — at any normal viewport the
@@ -1637,6 +1636,9 @@
      than the image aspect-ratio could repeat-tile without this.
      Round-1 review finding I4. */
   background-repeat: no-repeat;
+  /* Match .hero / .bungalow-hero — clips any future ::after decoration
+     so it can't bleed into the header zone above. */
+  overflow: hidden;
   color: var(--text-light);
   /* Inline background-image url() on the section is rewritten by Vite
      at build time, so the dev path stays /assets/img/intro-villa.jpg
